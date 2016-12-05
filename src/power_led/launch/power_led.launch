@@ -1,0 +1,7 @@
+<launch>
+
+  <group ns="power_led">
+    <node pkg="power_led" name="power_listener" type="power_listener.py"/>
+  </group>
+
+</launch>
