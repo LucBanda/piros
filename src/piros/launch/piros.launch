@@ -3,5 +3,9 @@
   <group ns="power_led">
     <node pkg="power_led" name="power_listener" type="power_listener.py"/>
   </group>
+  
+  <group ns="imu_talk">
+    <node pkg="imu_talk" name="imu_talk" type="talker" args="6b 1e imu imutalk"/>
+  </group>
 
 </launch>
