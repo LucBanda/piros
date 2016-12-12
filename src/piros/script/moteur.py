@@ -28,8 +28,8 @@ def initGpio():
 	gpio.setup(enA, gpio.OUT)
 	gpio.setup(enB, gpio.OUT)
 	
-	enAPwm = gpio.PWM(enA, 50) # enable gpio pwm 10Hz
-	enBPwm = gpio.PWM(enB, 50) # enable gpio pwm 10Hz
+	enAPwm = gpio.PWM(enA, 20) # enable gpio pwm 10Hz
+	enBPwm = gpio.PWM(enB, 20) # enable gpio pwm 10Hz
 	print("initializing pwms");
 	enBPwm.start(0)
 	enAPwm.start(0)
@@ -77,11 +77,13 @@ def callback(msg):
 	# Do velocity processing here:
 	# Use the kinematics of your robot to map linear and angular velocities into motor commands
 
-	v_l = msg.linear.x * 50.0
-	v_r = msg.linear.x * 50.0
-	v_l = v_l + msg.angular.x*50.0
-	v_r = v_r - msg.angular.x*50.0
+	v_l = msg.linear.x * 75.0
+	v_r = msg.linear.x * 75.0
+	v_l = v_l + msg.angular.x*25.0
+	v_r = v_r - msg.angular.x*25.0
 	
+	# compensate specific motor diff
+	v_r = 0.7 * v_r
 
 	# Then set your wheel speeds (using wheel_left and wheel_right as examples)
 	set_speed_left(v_l)
