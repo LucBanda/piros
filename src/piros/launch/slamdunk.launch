@@ -1,6 +1,0 @@
-<launch>
-  <machine name="kalamos" address="192.168.45.1" env-loader="/opt/ros-kalamos/env-remote.sh" user="kalamos" />
-  
-  <node machine="kalamos" name="slamdunk" pkg="kalamos_ros_sdk" type="dummy_producer_node" />
-
-</launch>
