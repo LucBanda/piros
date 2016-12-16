@@ -5,116 +5,118 @@ from std_msgs.msg import String
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Imu
 
-enA=27
-enB=24
-fwdA=22
-fwdB=18
-bckA=17
-bckB=23
-
-global enAPwm
-global enBPwm
-global lastTimeStamp
-lastTimeStamp = None
 
 
-def initGpio():
-	global enAPwm
-	global enBPwm
-	gpio.setmode(gpio.BCM)
-	gpio.setup(fwdA, gpio.OUT)
-	gpio.setup(fwdB, gpio.OUT)
-	gpio.setup(bckA, gpio.OUT)
-	gpio.setup(bckB, gpio.OUT)
-	gpio.setup(enA, gpio.OUT)
-	gpio.setup(enB, gpio.OUT)
+
+
+class Motor:
+	enA=27
+	enB=24
+	fwdA=22
+	fwdB=18
+	bckA=17
+	bckB=23
 	
-	enAPwm = gpio.PWM(enA, 20) # enable gpio pwm 10Hz
-	enBPwm = gpio.PWM(enB, 20) # enable gpio pwm 10Hz
-	print("initializing pwms");
-	enBPwm.start(0)
-	enAPwm.start(0)
+	def __init__(self):
+		gpio.setmode(gpio.BCM)
+		gpio.setup(self.fwdA, gpio.OUT)
+		gpio.setup(self.fwdB, gpio.OUT)
+		gpio.setup(self.bckA, gpio.OUT)
+		gpio.setup(self.bckB, gpio.OUT)
+		gpio.setup(self.enA, gpio.OUT)
+		gpio.setup(self.enB, gpio.OUT)
+	
+		self.enAPwm = gpio.PWM(self.enA, 20) # enable gpio pwm 10Hz
+		self.enBPwm = gpio.PWM(self.enB, 20) # enable gpio pwm 10Hz
+		self.enBPwm.start(0)
+		self.enAPwm.start(0)
+		
+	def set_speed(self, v_l, v_r):
+		#set gear for left wheel
+		gpio.output(self.fwdA, gpio.HIGH if (v_l > 0) else gpio.LOW)
+		gpio.output(self.bckA, gpio.LOW if (v_l > 0) else gpio.HIGH)
+		
+		#set gear for right wheel
+		gpio.output(self.fwdB, gpio.HIGH if (v_r > 0) else gpio.LOW)
+		gpio.output(self.bckB, gpio.LOW if (v_r > 0) else gpio.HIGH)
+		
+		if (v_l < 0):
+			v_l = -v_l
+		
+		if (v_r < 0):
+			v_r = -v_r
+		
+		#apply command on both wheels
+		self.enAPwm.ChangeDutyCycle(v_l)
+		self.enBPwm.ChangeDutyCycle(v_r)
+		
+	def stop(self):
+		self.enAPwm.stop()
+		self.enBPwm.stop()
+		gpio.cleanup()
+
+	
+class Autopilot:
+	def __init__(self, motor_callback):
+		self.motor_callback = motor_callback
+		self.v_r = 0.0
+		self.v_l = 0.0
+		self.cmd = None
+		self.imu = None
+		self.lastTimeStamp = None
+		
+	def set_cmd(self, cmd):
+		self.lastTimeStamp = rospy.Time.now()
+		self.cmd = cmd
+			
+	def set_imu(self, imu):
+		self.imu = imu
+	
+	def timeoutcheck(self):
+
+		if self.lastTimeStamp != None:
+			d = rospy.Time.now() - self.lastTimeStamp 
+			seconds = d.to_nsec() #floating point
+			if seconds > 500000000:
+				self.lastTimeStamp = None
+				return True
+		return False
+
+			
+	def run(self):
+		if (self.timeoutcheck()):
+			self.motor_callback(0.0, 0.0)
+			self.cmd = None
+			
+		if (self.cmd != None):
+			v_l = self.cmd.linear.x*60
+			v_r = self.cmd.linear.x*60
+			v_l = v_l - self.cmd.angular.z*40
+			v_r = v_r + self.cmd.angular.z*40
+			self.motor_callback(v_l, v_r)
 
 
-def set_speed_left(v_l):
-	global enAPwm
-	gpio.output(fwdA, gpio.HIGH if (v_l > 0) else gpio.LOW)
-	gpio.output(bckA, gpio.LOW if (v_l > 0) else gpio.HIGH)
-	
-	if (v_l > 0):
-		enAPwm.ChangeDutyCycle(v_l)
-	else:
-		enAPwm.ChangeDutyCycle(-v_l)
+def cmd_callback(autopilot, cmd):
+	autopilot.set_cmd(cmd)
 
-def set_speed_right(v_l):
-	global enBPwm
-	gpio.output(fwdB, gpio.HIGH if (v_l > 0) else gpio.LOW)
-	gpio.output(bckB, gpio.LOW if (v_l > 0) else gpio.HIGH)
-	
-	if (v_l > 0):
-		enBPwm.ChangeDutyCycle(v_l)
-	else:
-		enBPwm.ChangeDutyCycle(-v_l)
-
-def timeoutcheck():
-	global lastTimeStamp
-	if lastTimeStamp != None:
-		d = rospy.Time.now() - lastTimeStamp 
-		seconds = d.to_nsec() #floating point
-		if seconds > 500000000:
-			print("resetting GPIOs %f ; lasttimestamp = %f", seconds)
-			enAPwm.ChangeDutyCycle(0)
-			enBPwm.ChangeDutyCycle(0)
-			lastTimeStamp = None
-	
-def cmd_callback(msg):
-	global lastTimeStamp
-	lastTimeStamp = rospy.Time.now()
-	
-	# Do velocity processing here:
-	# Use the kinematics of your robot to map linear and angular velocities into motor commands
-
-	#linear between -1/1
-	#angle between -1/1
-	v_l = msg.linear.x*60
-	v_r = msg.linear.x*60
-	v_l = v_l - msg.angular.z*40
-	v_r = v_r + msg.angular.z*40
-	
-	
-	# compensate specific motor diff
-	v_r = 0.7 * v_r
-
-	# Then set your wheel speeds (using wheel_left and wheel_right as examples)
-	set_speed_left(v_l)
-	set_speed_right(v_r)
-	
-def imu_callback(imu):
-	None
+def imu_callback(autopilot, imu):
+	autopilot.set_imu(imu)
 
 def listener():
-	global enAPwm
-	global enBPwm
-	# In ROS, nodes are uniquely named. If two nodes with the same
-	# node are launched, the previous one is kicked off. The
-	# anonymous=True flag means that rospy will choose a unique
-	# name for our 'listener' node so that multiple listeners can
-	# run simultaneously.
-	initGpio()
 	rospy.init_node('moteur', anonymous=True)
 
-
-	rospy.Subscriber("/cmd_vel", Twist, cmd_callback)
-	rospy.Subscriber("/imu", Imu, imu_callback)
-	#test:
+	motors = Motor()
+	autopilot = Autopilot(motors.set_speed)
+	
+	rospy.Subscriber("/cmd_vel", Twist, autopilot.set_cmd)
+	rospy.Subscriber("/imu", Imu, lambda x: autopilot.set_imu)
 	
 	r = rospy.Rate(10)
 	while not rospy.is_shutdown():
-		timeoutcheck()
-		r.sleep()
-	enAPwm.stop()
-	enBPwm.stop()
-	gpio.cleanup()
+		autopilot.run()
+	
+	print "stoping nicely"
+	motors.stop()
 	
 if __name__ == '__main__':
 	listener()
