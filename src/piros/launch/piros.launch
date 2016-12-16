@@ -1,10 +1,7 @@
 <launch>
 
-  <group ns="power_led">
-    <node pkg="power_led" name="power_listener" type="power_listener.py"/>
-  </group>
-  
   <group ns="piros">
+    <node pkg="piros" name="boot_stages" type="power_listener.py"/>
     <node pkg="piros" name="moteur" type="moteur.py" />
   </group>
 

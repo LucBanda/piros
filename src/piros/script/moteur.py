@@ -3,6 +3,7 @@ import rospy
 import RPi.GPIO as gpio
 from std_msgs.msg import String
 from geometry_msgs.msg import Twist
+from sensor_msgs.msg import Imu
 
 enA=27
 enB=24
@@ -59,7 +60,6 @@ def timeoutcheck():
 	global lastTimeStamp
 	if lastTimeStamp != None:
 		d = rospy.Time.now() - lastTimeStamp 
-		print("duration ", d.to_nsec())
 		seconds = d.to_nsec() #floating point
 		if seconds > 500000000:
 			print("resetting GPIOs %f ; lasttimestamp = %f", seconds)
@@ -67,20 +67,20 @@ def timeoutcheck():
 			enBPwm.ChangeDutyCycle(0)
 			lastTimeStamp = None
 	
-def callback(msg):
+def cmd_callback(msg):
 	global lastTimeStamp
-	rospy.loginfo("Received a /cmd_vel message!")
-	rospy.loginfo("Linear Components: [%f, %f, %f]"%(msg.linear.x, msg.linear.y, msg.linear.z))
-	rospy.loginfo("Angular Components: [%f, %f, %f]"%(msg.angular.x, msg.angular.y, msg.angular.z))
 	lastTimeStamp = rospy.Time.now()
 	
 	# Do velocity processing here:
 	# Use the kinematics of your robot to map linear and angular velocities into motor commands
 
-	v_l = msg.linear.x * 75.0
-	v_r = msg.linear.x * 75.0
-	v_l = v_l + msg.angular.x*25.0
-	v_r = v_r - msg.angular.x*25.0
+	#linear between -1/1
+	#angle between -1/1
+	v_l = msg.linear.x*60
+	v_r = msg.linear.x*60
+	v_l = v_l - msg.angular.z*40
+	v_r = v_r + msg.angular.z*40
+	
 	
 	# compensate specific motor diff
 	v_r = 0.7 * v_r
@@ -88,6 +88,9 @@ def callback(msg):
 	# Then set your wheel speeds (using wheel_left and wheel_right as examples)
 	set_speed_left(v_l)
 	set_speed_right(v_r)
+	
+def imu_callback(imu):
+	None
 
 def listener():
 	global enAPwm
@@ -101,8 +104,8 @@ def listener():
 	rospy.init_node('moteur', anonymous=True)
 
 
-	rospy.Subscriber("/cmd_vel", Twist, callback)
-
+	rospy.Subscriber("/cmd_vel", Twist, cmd_callback)
+	rospy.Subscriber("/imu", Imu, imu_callback)
 	#test:
 	
 	r = rospy.Rate(10)
